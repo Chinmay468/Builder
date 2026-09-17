@@ -23,9 +23,21 @@ import urllib.request
 from html.parser import HTMLParser
 from typing import Optional
 
+# Ensure standard streams handle Unicode characters on all platforms (including Windows cp1252)
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = "qwen/qwen3.8-27b"
-FALLBACK_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+FALLBACK_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b"]
 
 
 # --------------------------------------------------------------------------
@@ -390,6 +402,30 @@ def extract_latex(model_output: str) -> str:
     return model_output.strip()
 
 
+def sanitize_latex(tex: str) -> str:
+    """
+    Replaces Unicode punctuation and special characters with standard LaTeX equivalents
+    to prevent UnicodeEncodeError in cp1252 consoles and LaTeX compilation errors.
+    """
+    replacements = {
+        "\u2011": "-",   # non-breaking hyphen
+        "\u2010": "-",   # hyphen
+        "\u2012": "-",   # figure dash
+        "\u2013": "--",  # en dash
+        "\u2014": "---", # em dash
+        "\u2018": "`",   # left single quote
+        "\u2019": "'",   # right single quote
+        "\u201c": "``",  # left double quote
+        "\u201d": "''",  # right double quote
+        "\u00a0": " ",   # non-breaking space
+        "\u2026": "...", # ellipsis
+        "\u2022": "\\textbullet{}", # bullet
+    }
+    for orig, rep in replacements.items():
+        tex = tex.replace(orig, rep)
+    return tex
+
+
 def braces_balanced(tex: str) -> bool:
     """
     Checks whether curly braces { } in LaTeX are balanced,
@@ -630,6 +666,8 @@ def compile_pdf(tex_path: str) -> bool:
             ["latexmk", "-pdf", "-interaction=nonstopmode", f"-output-directory={work_dir}", abs_tex],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         success = os.path.isfile(pdf_path)
         last_out = res.stdout
@@ -640,12 +678,16 @@ def compile_pdf(tex_path: str) -> bool:
             [compiler, "-interaction=nonstopmode", "-output-directory", work_dir, abs_tex],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         print(f"[compile] Running {compiler} (pass 2/2)...")
         res2 = subprocess.run(
             [compiler, "-interaction=nonstopmode", "-output-directory", work_dir, abs_tex],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         success = os.path.isfile(pdf_path)
         last_out = res2.stdout
@@ -785,7 +827,7 @@ def main():
 
     # [3/4] Validate LaTeX output
     print("[3/4] Validating LaTeX output...")
-    tailored_tex = extract_latex(raw_output)
+    tailored_tex = sanitize_latex(extract_latex(raw_output))
 
     if not looks_like_latex(tailored_tex):
         sys.exit(
