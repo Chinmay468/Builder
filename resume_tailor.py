@@ -641,15 +641,32 @@ def compile_pdf(tex_path: str) -> bool:
     Compiles the LaTeX file to PDF. Detects available engine (latexmk, pdflatex, xelatex).
     """
     compiler = None
-    for candidate in ("latexmk", "pdflatex", "xelatex"):
-        if shutil.which(candidate):
-            compiler = candidate
+    compiler_cmd = None
+
+    # Check for tectonic first (preferred zero-dependency compiler)
+    possible_tectonic = [
+        shutil.which("tectonic"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "bin", "tectonic.exe"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "bin", "tectonic"),
+        os.path.join(os.getcwd(), "tools", "bin", "tectonic.exe"),
+    ]
+    for pt in possible_tectonic:
+        if pt and os.path.isfile(pt):
+            compiler = "tectonic"
+            compiler_cmd = os.path.abspath(pt)
             break
 
     if not compiler:
+        for candidate in ("latexmk", "pdflatex", "xelatex"):
+            if shutil.which(candidate):
+                compiler = candidate
+                compiler_cmd = candidate
+                break
+
+    if not compiler:
         print(
-            "[warn] No LaTeX compiler found on PATH (checked latexmk, pdflatex, xelatex).\n"
-            "       Install TeX Live, MacTeX, or MiKTeX if you want automatic PDF builds.",
+            "[warn] No LaTeX compiler found on PATH (checked tectonic, latexmk, pdflatex, xelatex).\n"
+            "       Install TeX Live, MacTeX, MiKTeX, or ensure tools/bin/tectonic.exe exists.",
             file=sys.stderr,
         )
         return False
@@ -659,9 +676,28 @@ def compile_pdf(tex_path: str) -> bool:
     base_name = os.path.splitext(os.path.basename(abs_tex))[0]
     pdf_path = os.path.join(work_dir, f"{base_name}.pdf")
 
-    print(f"[compile] Compiling PDF using '{compiler}'...")
+    # Ensure resume.cls is available in the target compilation directory
+    cls_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.cls")
+    cls_dest = os.path.join(work_dir, "resume.cls")
+    if os.path.isfile(cls_source) and not os.path.isfile(cls_dest):
+        try:
+            shutil.copy2(cls_source, cls_dest)
+        except Exception:
+            pass
 
-    if compiler == "latexmk":
+    print(f"[compile] Compiling PDF using '{compiler}' ({compiler_cmd})...")
+
+    if compiler == "tectonic":
+        res = subprocess.run(
+            [compiler_cmd, abs_tex, "-o", work_dir],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        success = os.path.isfile(pdf_path)
+        last_out = (res.stdout or "") + "\n" + (res.stderr or "")
+    elif compiler == "latexmk":
         res = subprocess.run(
             ["latexmk", "-pdf", "-interaction=nonstopmode", f"-output-directory={work_dir}", abs_tex],
             capture_output=True,
@@ -701,6 +737,35 @@ def compile_pdf(tex_path: str) -> bool:
         if log_snippet:
             print(f"----- {compiler} output (tail) -----\n{log_snippet}", file=sys.stderr)
         return False
+
+
+def tailor_resume(
+    master_tex: str,
+    job_description: str,
+    company: str = "",
+    role: str = "",
+    model: str = DEFAULT_MODEL,
+    api_key: Optional[str] = None,
+    api_base: Optional[str] = None,
+) -> str:
+    """
+    Tailor a master resume LaTeX document for a specific JD and return the resulting LaTeX string.
+    """
+    keys = get_groq_api_keys()
+    if api_key:
+        if api_key in keys:
+            keys.remove(api_key)
+        keys.insert(0, api_key)
+    if not keys:
+        raise ValueError("No Groq API keys found. Configure GROQ_API_KEY in .env.")
+
+    user_prompt = build_user_prompt(master_tex, job_description, company, role)
+    raw_output = call_groq(SYSTEM_PROMPT, user_prompt, model, keys, api_base)
+    tailored_tex = sanitize_latex(extract_latex(raw_output))
+    if not looks_like_latex(tailored_tex):
+        raise ValueError("AI output did not contain valid LaTeX markup.")
+    validate_output(tailored_tex, master_tex)
+    return tailored_tex
 
 
 # --------------------------------------------------------------------------
