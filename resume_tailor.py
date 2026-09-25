@@ -739,6 +739,63 @@ def compile_pdf(tex_path: str) -> bool:
         return False
 
 
+def load_github_dossier() -> str:
+    """Loads verified GitHub project dossier if present."""
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "github_dossier.md"),
+        os.path.join(os.getcwd(), "builder", "github_dossier.md"),
+        os.path.join(os.getcwd(), "github_dossier.md"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    return f.read().strip()
+            except Exception:
+                pass
+    return ""
+
+
+def get_tailor_system_prompt() -> str:
+    dossier = load_github_dossier()
+    if not dossier:
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT + f"""
+
+═══════════════════════════════════════════════════════════
+VERIFIED CANDIDATE GITHUB PROJECT DOSSIER (GROUND TRUTH)
+═══════════════════════════════════════════════════════════
+The following technical details, features, dependencies, and architectures are extracted directly from the candidate's real GitHub repositories.
+Whenever tailoring, expanding points, or elaborating on projects, draw ONLY from these verified facts:
+
+{dossier}
+
+GROUND TRUTH ENFORCEMENT:
+- If asked to add more points or elaborate on projects, use the ACTUAL features above (e.g. SHA-256 idempotency fingerprinting, Redisson distributed locks, transactional saga compensation, BullMQ queues, atomic $gte MongoDB stock updates).
+- NEVER invent outside libraries, fake metrics, or fake architectures that are not present in their codebases or master resume.
+"""
+
+
+def get_refine_system_prompt() -> str:
+    dossier = load_github_dossier()
+    if not dossier:
+        return REFINE_SYSTEM_PROMPT
+    return REFINE_SYSTEM_PROMPT + f"""
+
+═══════════════════════════════════════════════════════════
+VERIFIED CANDIDATE GITHUB PROJECT DOSSIER (GROUND TRUTH)
+═══════════════════════════════════════════════════════════
+The following technical details, features, dependencies, and architectures are extracted directly from the candidate's real GitHub repositories.
+Whenever refining, expanding points, or elaborating on projects, draw ONLY from these verified facts:
+
+{dossier}
+
+GROUND TRUTH ENFORCEMENT:
+- When applying candidate requests (e.g. "add more points to projects" or "elaborate on architecture"), use the ACTUAL architecture details from the dossier above.
+- NEVER invent outside libraries, fake metrics, or fake architectures that are not present in their codebases or master resume.
+"""
+
+
 def tailor_resume(
     master_tex: str,
     job_description: str,
@@ -760,7 +817,7 @@ def tailor_resume(
         raise ValueError("No Groq API keys found. Configure GROQ_API_KEY in .env.")
 
     user_prompt = build_user_prompt(master_tex, job_description, company, role)
-    raw_output = call_groq(SYSTEM_PROMPT, user_prompt, model, keys, api_base)
+    raw_output = call_groq(get_tailor_system_prompt(), user_prompt, model, keys, api_base)
     tailored_tex = sanitize_latex(extract_latex(raw_output))
     if not looks_like_latex(tailored_tex):
         raise ValueError("AI output did not contain valid LaTeX markup.")
@@ -773,7 +830,7 @@ Your job is to apply the candidate's feedback and refine the resume while preser
 
 CRITICAL RULES:
 - Never change personal details (name, email, phone, links, graduation year 2023-2027, CGPA 8.8)
-- Never invent technologies or facts not in the resume
+- Never invent technologies or facts not in the resume or GitHub dossier
 - Must fit on exactly ONE page
 - Strictly maintain \\documentclass{resume}, tabular skills environment, and itemize formatting
 - Return ONLY the full updated LaTeX source code from \\documentclass to \\end{document}. No markdown fences, no explanations.
@@ -823,7 +880,7 @@ CURRENT TAILORED RESUME LATEX SOURCE:
 Apply the candidate's feedback carefully to refine the LaTeX resume.
 Return ONLY the full updated LaTeX source code starting from \\documentclass to \\end{{document}}.
 """
-    raw_output = call_groq(REFINE_SYSTEM_PROMPT, user_prompt, model, keys, api_base)
+    raw_output = call_groq(get_refine_system_prompt(), user_prompt, model, keys, api_base)
     tailored_tex = sanitize_latex(extract_latex(raw_output))
     if not looks_like_latex(tailored_tex):
         raise ValueError("AI output did not contain valid LaTeX markup.")
@@ -949,7 +1006,7 @@ def main():
     print(f"[2/4] Sending to AI model ({args.model}) for tailoring{shift_info}...")
     user_prompt = build_user_prompt(resume_tex, job_description, args.company, args.role)
     try:
-        raw_output = call_groq(SYSTEM_PROMPT, user_prompt, args.model, keys, args.api_base)
+        raw_output = call_groq(get_tailor_system_prompt(), user_prompt, args.model, keys, args.api_base)
     except Exception as e:
         sys.exit(f"[error] API call failed: {e}")
 
