@@ -768,6 +768,69 @@ def tailor_resume(
     return tailored_tex
 
 
+REFINE_SYSTEM_PROMPT = """You are an expert resume editor. You receive a previously tailored LaTeX resume, a job description, and specific change requests/feedback from the candidate.
+Your job is to apply the candidate's feedback and refine the resume while preserving ALL LaTeX structure, ATS formatting, and candidate facts.
+
+CRITICAL RULES:
+- Never change personal details (name, email, phone, links, graduation year 2023-2027, CGPA 8.8)
+- Never invent technologies or facts not in the resume
+- Must fit on exactly ONE page
+- Strictly maintain \\documentclass{resume}, tabular skills environment, and itemize formatting
+- Return ONLY the full updated LaTeX source code from \\documentclass to \\end{document}. No markdown fences, no explanations.
+"""
+
+
+def refine_resume(
+    current_tex: str,
+    feedback: str,
+    job_description: str = "",
+    company: str = "",
+    role: str = "",
+    model: str = DEFAULT_MODEL,
+    api_key: Optional[str] = None,
+    api_base: Optional[str] = None,
+) -> str:
+    """
+    Refine an existing tailored LaTeX resume based on user feedback.
+    """
+    keys = get_groq_api_keys()
+    if api_key:
+        if api_key in keys:
+            keys.remove(api_key)
+        keys.insert(0, api_key)
+    if not keys:
+        raise ValueError("No Groq API keys found. Configure GROQ_API_KEY in .env.")
+
+    user_prompt = f"""TARGET APPLICATION:
+Company: {company or 'Company'}
+Role: {role or 'Software Engineer'}
+
+TARGET JOB DESCRIPTION:
+==================================================
+{job_description.strip() if job_description else 'N/A'}
+==================================================
+
+CANDIDATE'S FEEDBACK / REQUESTED CHANGES:
+==================================================
+{feedback.strip()}
+==================================================
+
+CURRENT TAILORED RESUME LATEX SOURCE:
+==================================================
+{current_tex.strip()}
+==================================================
+
+Apply the candidate's feedback carefully to refine the LaTeX resume.
+Return ONLY the full updated LaTeX source code starting from \\documentclass to \\end{{document}}.
+"""
+    raw_output = call_groq(REFINE_SYSTEM_PROMPT, user_prompt, model, keys, api_base)
+    tailored_tex = sanitize_latex(extract_latex(raw_output))
+    if not looks_like_latex(tailored_tex):
+        raise ValueError("AI output did not contain valid LaTeX markup.")
+    validate_output(tailored_tex, current_tex)
+    return tailored_tex
+
+
 # --------------------------------------------------------------------------
 # Main CLI Entry Point
 # --------------------------------------------------------------------------
