@@ -284,18 +284,37 @@ def local_evaluate(jd_text: str) -> dict:
 # --------------------------------------------------------------------------
 
 EVALUATOR_PROMPT = """
-You are a strict job application advisor for a specific candidate.
+You are a strategic job application advisor for a specific software engineering candidate.
 
 CANDIDATE PROFILE:
-- Final-year B.Tech IT student in India, graduating May/June 2027
-- 1 month internship (completed June 2026) — only experience
-- Core stack: Java, Spring Boot, React.js, Node.js, Express.js, MongoDB, MySQL, Kafka, JWT, Docker, GitHub Actions, JUnit
-- AI tools: Claude, ChatGPT, GitHub Copilot, Gemini Flash API
-- Can only work in India or remote worldwide (no UK/AU/US work auth)
-- Python: basics only
-- TypeScript: not used professionally
-- NestJS: never used
-- NO experience with: C#, .NET, Elixir, Rust, Go, mobile dev, hardware, ML research
+- Education: Final-year B.Tech IT student in India, graduating May/June 2027
+- Experience: 1 month internship (completed June 2026) — targeting internships, entry-level, fresher, or 0-2 yrs roles
+- Core stack: Java, Spring Boot, React.js, Node.js, Express.js, MongoDB, MySQL, Kafka, JWT, Docker, GitHub Actions, JUnit, REST APIs, Git, Postman
+- AI & Tooling: Modern Agentic AI coding harnesses, Claude, ChatGPT, GitHub Copilot, Gemini Flash API
+- Location / Auth: Can only work in India or remote worldwide (NO UK/AU/US on-site work authorization)
+- Minor/Basic: Python (basics), C/C++ (academic basics), DSA foundation
+- NOT experienced in: C#, .NET, Elixir, Rust, Go, native iOS/Android, hardware/FPGA, ML research
+
+CRITICAL EVALUATION RULES:
+1. DISTINGUISH MANDATORY VS BONUS/OPTIONAL QUALIFICATIONS:
+   - Skills explicitly listed under "Bonus", "Good to have", "Nice to have", "Preferred", "Plus", or "Optional" are NOT required qualifications.
+   - NEVER classify missing bonus/preferred skills as critical gaps or blockers. Missing a bonus skill must NOT drop the verdict from APPLY to BORDERLINE, nor drop the score below 80 if core requirements are met.
+   - If candidate matches ANY bonus skill (e.g., Java, RESTful API), award positive bonus points!
+
+2. HANDLE "OR" / ALTERNATIVE REQUIREMENTS CORRECTLY:
+   - When a requirement offers options (e.g., "proficiency in C++/C#/Java or PHP" or "React or Angular"), if the candidate matches ANY of the options (e.g., Java), this requirement is 100% SATISFIED!
+   - Add the matched language/tech to "matched_skills".
+   - CRITICAL: Do NOT list any of the other alternative options (such as C++, C#, PHP) in "missing_skills". Only true non-negotiable mandatory skills that the candidate completely lacks should appear in "missing_skills".
+   - Bonus/optional items (e.g. 3D Mathematics) are optional preferences, not missing core requirements. Do not list them in "missing_skills" unless marked with "(Bonus)".
+
+3. INTERN & FRESHER EXPECTATIONS:
+   - For Intern, Trainee, or Entry-Level roles: core competencies are DSA, solid programming fundamentals, problem-solving, curiosity, and adaptability. Specialized niche domain experience (like 3D math, game engines, or prior commercial game shipping) when listed as bonus should be treated as an optional plus, NOT a penalty.
+   - If the candidate meets location, experience level, and core programming/AI tooling, the verdict should be APPLY.
+
+4. SCORING SCALE:
+   - APPLY (75 - 100): Fits location, experience level (intern/fresher/0-2y), and matches primary or alternative language/stack (e.g. Java, Web, AI tools, DSA). High match on core requirements.
+   - BORDERLINE (50 - 74): Fits location/experience, but requires a primary language the candidate does not know as a hard requirement (not bonus), or requires 2-3 years full-time experience.
+   - SKIP (0 - 49): Requires foreign work visa (US/UK/EU only), requires senior experience (3+ years, team lead), or primary non-negotiable tech stack is completely outside their domain (e.g. Senior C# .NET, Rust, SAP ERP, Embedded FPGA).
 
 EVALUATION TASK:
 Analyze this job description and return a JSON response with exactly this structure:
@@ -307,11 +326,11 @@ Analyze this job description and return a JSON response with exactly this struct
   "location_ok": true/false,
   "experience_ok": true/false,
   "stack_match_pct": 0-100,
-  "matched_skills": ["skill1", "skill2"],
-  "missing_skills": ["skill1", "skill2"],
-  "hard_blocks": ["reason1", "reason2"],
-  "warnings": ["warning1", "warning2"],
-  "green_flags": ["flag1", "flag2"],
+  "matched_skills": ["skills candidate possesses that match core requirements or bonus list"],
+  "missing_skills": ["strictly MANDATORY core skills that candidate lacks. DO NOT include bonus/nice-to-have items or satisfied OR alternatives here"],
+  "hard_blocks": ["non-negotiable blockers like US/UK only work auth or 3+ yrs full-time requirement"],
+  "warnings": ["noteworthy caveats or desirable domain knowledge to brush up on"],
+  "green_flags": ["matching positive signals like intern level, India location, Java, AI harnesses"],
   "resume_version": "java_backend" or "full_stack" or "ai_llm" or "general",
   "one_line_reason": "One sentence explaining the verdict",
   "apply_action": "What to do next in one sentence"
@@ -321,6 +340,48 @@ Return ONLY the JSON. No explanation. No markdown.
 """
 
 _DEFAULT_EVAL_MODELS = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "qwen/qwen3.6-27b"]
+
+
+def _clean_eval_result(parsed: dict) -> dict:
+    """
+    Cleans evaluation result to ensure OR language options and bonus skills
+    are not mistakenly flagged as missing blockers.
+    """
+    matched = [s.strip() for s in parsed.get("matched_skills", [])]
+    missing = [s.strip() for s in parsed.get("missing_skills", [])]
+    matched_lower = {s.lower() for s in matched} | {s.lower() for s in CANDIDATE.get("core_stack", [])}
+
+    # OR language alternatives: if any alternative is met, remove unselected options
+    or_groups = [
+        {"java", "c++", "c#", "php"},
+        {"react", "angular", "vue"},
+        {"postgresql", "mysql", "mongodb"},
+    ]
+    cleaned_missing = []
+    for m in missing:
+        m_lower = m.lower()
+        suppressed = False
+        for group in or_groups:
+            if m_lower in group and any(g in matched_lower for g in group if g != m_lower):
+                suppressed = True
+                break
+        if not suppressed:
+            cleaned_missing.append(m)
+
+    parsed["missing_skills"] = cleaned_missing
+
+    # Ensure consistency between score and verdict
+    score = parsed.get("score", 50)
+    verdict = str(parsed.get("verdict", "BORDERLINE")).upper()
+    hard_blocks = parsed.get("hard_blocks", [])
+
+    if not hard_blocks:
+        if score >= 75 and verdict == "BORDERLINE":
+            parsed["verdict"] = "APPLY"
+        elif verdict == "APPLY" and score < 75:
+            parsed["score"] = 80
+
+    return parsed
 
 
 def ai_evaluate(
@@ -394,7 +455,7 @@ def ai_evaluate(
 
                         parsed = json.loads(content)
                         if isinstance(parsed, dict) and "verdict" in parsed:
-                            return parsed
+                            return _clean_eval_result(parsed)
                 except urllib.error.HTTPError as e:
                     err_body = e.read().decode("utf-8", errors="ignore")
                     if e.code == 404 and "model_not_found" in err_body:
