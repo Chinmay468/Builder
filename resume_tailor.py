@@ -423,6 +423,21 @@ def sanitize_latex(tex: str) -> str:
     }
     for orig, rep in replacements.items():
         tex = tex.replace(orig, rep)
+    tex = sanitize_summary_methodology_claims(tex)
+    return tex
+
+
+def sanitize_summary_methodology_claims(tex: str) -> str:
+    """Ensure summary does not claim TDD when bullets only reflect after-the-fact testing."""
+    summary_match = re.search(r"(\\begin\{rSection\}\{SUMMARY\})(.*?)(\\end\{rSection\})", tex, re.DOTALL | re.IGNORECASE)
+    if not summary_match:
+        return tex
+    prefix, summary_body, suffix = summary_match.group(1), summary_match.group(2), summary_match.group(3)
+    rest_of_tex = tex[summary_match.end():].lower()
+    if re.search(r"\b(?:tdd|test-driven(?:\s+development)?)\b", summary_body, re.IGNORECASE) and not re.search(r"\b(?:tdd|test-driven(?:\s+development)?)\b", rest_of_tex):
+        cleaned_body = re.sub(r"(?i)\bproficient\s+in\s+tdd\b", "Strong focus on test coverage and reliability", summary_body)
+        cleaned_body = re.sub(r"(?i)\btdd\b", "automated testing", cleaned_body)
+        return tex[:summary_match.start()] + prefix + cleaned_body + suffix + tex[summary_match.end():]
     return tex
 
 
@@ -484,6 +499,15 @@ def validate_output(tailored_tex: str, master_tex: str) -> bool:
     if "May 2026 -- Present" in tailored_tex or "May 2026 – Present" in tailored_tex or "May 2026 - Present" in tailored_tex:
         errors.append("Internship marked as ongoing")
 
+    # Check methodology claims self-consistency (e.g. TDD claimed in summary without bullets evidence)
+    summary_match = re.search(r"\\begin\{rSection\}\{SUMMARY\}(.*?)\\end\{rSection\}", tailored_tex, re.DOTALL | re.IGNORECASE)
+    if summary_match:
+        summary_text = summary_match.group(1).lower()
+        if re.search(r"\b(?:tdd|test-driven(?:\s+development)?)\b", summary_text):
+            bullets_text = tailored_tex[summary_match.end():].lower()
+            if not re.search(r"\b(?:tdd|test-driven(?:\s+development)?)\b", bullets_text):
+                errors.append("Summary claims TDD / Test-Driven Development without supporting evidence in experience/project bullets")
+
     # Check structure preserved
     if "\\begin{itemize}" in master_tex and "\\begin{itemize}" not in tailored_tex:
         errors.append("itemize environment removed")
@@ -541,17 +565,18 @@ PAGE LENGTH:
 - Projects: maximum 2 bullets per project, 2 lines each
 - Achievements: maximum 4 items, 1 line each
 
-CONTENT ACCURACY:
+CONTENT ACCURACY & METHODOLOGY CLAIMS:
 - Never invent metrics not in the master resume
 - Never add technologies not in the master resume
 - Never fabricate employers, dates, or achievements
 - Rephrase bullets using JD keywords only where truthfully applicable
+- SELF-CONSISTENCY GUARDRAIL: Never claim a methodology, engineering practice, or proficiency level in the Summary (e.g. "Proficient in TDD", "expert in X", "specialized in Y") that is not directly evidenced by the experience or project bullets in that same resume. If the JD mentions a practice like TDD / Test-Driven Development and the candidate's actual bullets describe testing after implementation (such as integration, regression, or concurrency testing), the summary must reflect that precisely (e.g. "strong focus on test coverage and reliability" or "experienced in automated testing and regression validation") rather than claiming TDD specifically. Never echo the JD's methodology buzzwords as an unsupported personal claim.
 
 ═══════════════════════════════════════════════════════════
 WHAT YOU MAY CHANGE
 ═══════════════════════════════════════════════════════════
 
-1. SUMMARY — Rewrite to mirror JD language, max 3 lines, specific to role
+1. SUMMARY — Rewrite to mirror JD language where truthful, max 3 lines, specific to role. Strictly adhere to the self-consistency guardrail: do not claim methodologies or proficiency levels (e.g. TDD) not directly backed by experience/project bullets.
 2. SKILLS — Reorder rows to put most JD-relevant skills first, keep same format
 3. BULLET POINTS — Rephrase using JD keywords where truthful, keep \\item format
 4. PROJECT ORDER — Lead with the project most relevant to the JD
@@ -831,6 +856,7 @@ Your job is to apply the candidate's feedback and refine the resume while preser
 CRITICAL RULES:
 - Never change personal details (name, email, phone, links, graduation year 2023-2027, CGPA 8.8)
 - Never invent technologies or facts not in the resume or GitHub dossier
+- Never claim methodologies, practices, or proficiency levels (e.g. "Proficient in TDD") not directly evidenced by the bullets in the resume
 - Must fit on exactly ONE page
 - Strictly maintain \\documentclass{resume}, tabular skills environment, and itemize formatting
 - Return ONLY the full updated LaTeX source code from \\documentclass to \\end{document}. No markdown fences, no explanations.

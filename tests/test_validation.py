@@ -191,6 +191,24 @@ class TestValidateOutput(unittest.TestCase):
         tampered = self.master_sample.replace(">{\\bfseries}l", "ll")
         self.assertFalse(validate_output(tampered, self.master_sample))
 
+    def test_unsupported_tdd_claim_in_summary_fails(self):
+        tampered = (
+            "\\begin{rSection}{SUMMARY}\n"
+            "Proficient in TDD and microservices architecture.\n"
+            "\\end{rSection}\n"
+            + self.master_sample
+        )
+        self.assertFalse(validate_output(tampered, self.master_sample))
+
+    def test_supported_testing_claim_in_summary_passes(self):
+        tampered = (
+            "\\begin{rSection}{SUMMARY}\n"
+            "Strong focus on test coverage, integration testing, and reliability.\n"
+            "\\end{rSection}\n"
+            + self.master_sample
+        )
+        self.assertTrue(validate_output(tampered, self.master_sample))
+
 
 if __name__ == "__main__":
     unittest.main()
