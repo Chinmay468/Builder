@@ -100,5 +100,5 @@
 \def\namesize{\LARGE}
 \def\addressskip{\smallskip}
 \def\sectionlineskip{\medskip}
-\def\nameskip{\bigskip}
-\def\sectionskip{\medskip}
+\def\nameskip{\vspace{6pt plus 0.3fill minus 2pt}}
+\def\sectionskip{\vspace{4pt plus 1fill minus 2pt}}
