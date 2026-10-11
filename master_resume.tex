@@ -4,8 +4,8 @@
 \usepackage{enumitem}
 % ============================================================
 %   Chinmay Maheshwari — Resume
-%   Targeted : Google — Applications Engineering Intern 2027
-%   India | ATS-Optimised | One Page | September 2026
+%   Targeted : Master Resume
+%   India | ATS-Optimised | One Page
 % ============================================================
 \name{Chinmay Maheshwari}
 \address{
@@ -23,7 +23,7 @@ chinmaymaheshwari.it27@gmail.com $|$
 % ============================================================
 \begin{rSection}{SUMMARY}
 \vspace{-2pt}
-Final-year B.Tech (IT) undergraduate with strong programming fundamentals in Java and MERN, hands-on experience building and deploying scalable web applications and REST APIs, and a solid grounding in data structures and algorithms. Comfortable working across the full stack — from custom front-end interfaces to back-end services and SQL/NoSQL databases. Actively uses AI tools to write cleaner code and ship faster.
+Final-year B.Tech (IT) undergraduate with strong Java fundamentals, hands-on experience building and deploying backend services and REST APIs, and a solid grounding in data structures and algorithms. Experienced with SQL and NoSQL databases, JWT-based authentication, and event-driven design with Kafka. Uses AI tools to write cleaner code and ship faster.
 \vspace{-2pt}
 \end{rSection}
 
@@ -43,12 +43,11 @@ Jaipur Engineering College and Research Centre, Jaipur \hfill CGPA : 8.8\\
 \begin{rSection}{SKILLS}
 \vspace{-2pt}
 \begin{tabular}{ @{} >{\bfseries}l @{\hspace{2ex}} l }
-Languages          :& Java (Core), SQL\\
-Frontend           :& React.js, HTML5, CSS3 \\
-Backend \& APIs    :& Spring Boot 3, Node.js, RESTful APIs, JWT \\
-Databases          :& MySQL (SQL), MongoDB (NoSQL) \\
-Tools \& DevOps    :& Git, GitHub Actions (CI/CD), Docker, JUnit, Postman \\
-Fundamentals       :& DSA, OOP, DBMS, System Design(HLD) \\
+Languages : & Java(core), SQL\\
+Backend : & Spring Boot, REST APIs\\
+Databases : & MySQL, MongoDB\\
+Tools : & Git, GitHub, Postman\\
+Core CS : & DSA, OOPs, DBMS, OS(basics), System Design(basics)\\
 \end{tabular}
 \vspace{-2pt}
 \end{rSection}
@@ -61,9 +60,8 @@ Fundamentals       :& DSA, OOP, DBMS, System Design(HLD) \\
 \textbf{Full Stack Developer Intern} \hfill {May 2026 -- June 2026}\\
 Yinolite Solution \hfill {\small \textbf{MERN Stack}}
 \begin{itemize}[leftmargin=*, itemsep=-3pt, topsep=0pt]
-\item Built custom back-end services and front-end features for a Job Portal System using React.js and Node.js, implementing 9+ RESTful API endpoints with JWT-based role-based access control to automate recruiter and candidate workflows.
-\item Designed a 3-collection MongoDB schema with optimized dynamic filtering; wrote integration and regression tests to identify and resolve issues before release, maintaining clean, modular, and self-sustaining code throughout.
-\item Leveraged AI coding tools (Claude, GitHub Copilot) to improve code quality and accelerate feature delivery across the full stack.
+\item Picked and independently built Skill-Bridge, a job portal, as my internship project, from API design and authentication to file uploads and deployment.
+\item Implemented the Node.js, Express, and MongoDB backend with JWT and Google OAuth 2.0 login, role-based access for recruiters and candidates, and Cloudinary resume uploads.
 \end{itemize}
 \vspace{-4pt}
 \end{rSection}
@@ -76,18 +74,20 @@ Yinolite Solution \hfill {\small \textbf{MERN Stack}}
 \textbf{Skill-Bridge : Job Portal System} $\rightarrow$
 \href{https://github.com/Chinmay0608/job-portal-system}{[Github]}
 $|$\hspace{5pt}\href{https://job-portal-system-alpha.vercel.app/}{[Live]}
-\hfill {React.js, Node.js, Express.js, MongoDB}
+\hfill {React.js, Node.js, MongoDB}
 \begin{itemize}[leftmargin=*, itemsep=-3pt, topsep=0pt]
-\item Designed and deployed a full-stack web application with custom React.js front-end dashboards and Node.js back-end services, automating job posting and application workflows for recruiters and candidates with JWT and Google OAuth 2.0 authentication.
-\item Integrated Cloudinary for media management, implemented rate-limiting and input sanitization for security, and designed a normalized MongoDB schema with indexed queries for reliable, fast data retrieval at scale.
+\item Built a job portal where recruiters post jobs and candidates apply, with role-based access, JWT authentication, and Google OAuth 2.0 login.
+\item Designed REST APIs for auth, job postings, applications, and profile management, organized into separate routes, controllers, and models on a Node.js, Express, and MongoDB backend.
+\item Integrated Cloudinary for resume uploads and deployed the app with a live demo. Used AI tools for boilerplate and UI work, while owning the API design, auth flows, and data model.
 \end{itemize}
 \vspace{2pt}
-\textbf{Distributed Order Processing System} $\rightarrow$
-\href{https://github.com/Chinmay0608/distributed-order-processing}{[Github]}
-\hfill {Java, Spring Boot, Kafka, Redis, MongoDB, Docker}
+\textbf{MindVault : Journal Management System} $\rightarrow$
+\href{https://github.com/Chinmay0608/MindVault}{[Github]}
+\hfill {Java, Spring Boot, Gemini API}
 \begin{itemize}[leftmargin=*, itemsep=-3pt, topsep=0pt]
-\item Built a distributed microservices backend using Spring Boot with Apache Kafka for async order processing, Redis for inventory locking and idempotency, and MongoDB for persistence — containerized with Docker Compose for one-command local deployment.
-\item Wrote a 50-thread concurrent race condition test to validate inventory correctness under high load; implemented idempotency service to prevent duplicate order processing — demonstrating production-grade reliability thinking.
+\item Built a Spring Boot backend for a journaling app with JWT authentication (15-minute access tokens plus HTTP-only refresh cookies), role-based access, and layered REST APIs backed by MongoDB.
+\item Used Apache Kafka to run sentiment analysis asynchronously, so saving a journal entry returns immediately instead of waiting on the external AI call.
+\item Integrated the Gemini API for mood classification, with a local keyword-based fallback that keeps analysis working when the API fails or is rate-limited.
 \end{itemize}
 \vspace{-4pt}
 \end{rSection}
@@ -98,12 +98,10 @@ $|$\hspace{5pt}\href{https://job-portal-system-alpha.vercel.app/}{[Live]}
 \begin{rSection}{ACHIEVEMENTS \& CERTIFICATIONS}
 \vspace{-2pt}
 \begin{itemize}[leftmargin=*, itemsep=-3pt, topsep=0pt]
-\item Solved \textbf{400+} problems on LeetCode focusing on Data Structures \& Algorithms
-\item Completed Java Development Certification
-\href{https://drive.google.com/file/d/19W0G-xFzkwkhkULccCE2gLa9lP_WyJ1U/view?usp=drive_link}{[Certificate]}
-\item Published a review paper in \textbf{Pratibodh} on \textbf{Impact of Technology on Education and Learning}
-\href{https://pratibodh.org/index.php/pratibodh/article/view/345}{[Paper]}.
-\item Coordinated the \textbf{Knowledge Knockout} tech fest (2024 \& 2025), managing cross-functional team coordination and end-to-end event execution.
+\item Solved \textbf{300+} DSA problems across LeetCode
+\item Earned a Java Development Certification. \href{https://drive.google.com/file/d/19W0G-xFzkwkhkULccCE2gLa9lP_WyJ1U/view?usp=drive_link}{[Certificate]}
+\item Published a review paper in \textbf{Pratibodh} titled \textbf{Impact of Technology on Education and Learning} \href{https://pratibodh.org/index.php/pratibodh/article/view/345}{[Paper]}.
+\item Organized the \textbf{Knowledge Knockout} technical fest (2024 \& 2025).
 \end{itemize}
 \end{rSection}
 
