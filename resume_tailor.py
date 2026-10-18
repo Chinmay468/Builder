@@ -809,9 +809,48 @@ def print_diff(original_tex: str, tailored_tex: str, original_name: str = "origi
 # PDF Compilation
 # --------------------------------------------------------------------------
 
+def get_pdf_page_count(pdf_path: str) -> int:
+    """
+    Returns the page count of a PDF file using pypdf if available,
+    falling back to binary stream parsing or pdfinfo if not.
+    """
+    if not os.path.isfile(pdf_path):
+        return 0
+
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(pdf_path)
+        return len(reader.pages)
+    except Exception:
+        pass
+
+    if shutil.which("pdfinfo"):
+        try:
+            res = subprocess.run(["pdfinfo", pdf_path], capture_output=True, text=True, errors="replace")
+            m = re.search(r"Pages:\s+(\d+)", res.stdout)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+
+    try:
+        with open(pdf_path, "rb") as f:
+            data = f.read()
+        counts = [int(m.group(1)) for m in re.finditer(rb"/Type\s*/Pages.*?/Count\s+(\d+)", data, re.DOTALL)]
+        if counts:
+            return max(counts)
+        page_objs = re.findall(rb"/Type\s*/Page\b", data)
+        if page_objs:
+            return len(page_objs)
+    except Exception:
+        pass
+
+    return 1
+
+
 def compile_pdf(tex_path: str) -> bool:
     """
-    Compiles the LaTeX file to PDF. Detects available engine (latexmk, pdflatex, xelatex).
+    Compiles the LaTeX file to PDF and verifies 1-page fit. Detects available engine (tectonic, latexmk, pdflatex, xelatex).
     """
     compiler = None
     compiler_cmd = None
@@ -819,6 +858,8 @@ def compile_pdf(tex_path: str) -> bool:
     # Check for tectonic first (preferred zero-dependency compiler)
     possible_tectonic = [
         shutil.which("tectonic"),
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "tools", "bin", "tectonic.exe"),
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "tools", "bin", "tectonic"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "bin", "tectonic.exe"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools", "bin", "tectonic"),
         os.path.join(os.getcwd(), "tools", "bin", "tectonic.exe"),
@@ -902,7 +943,15 @@ def compile_pdf(tex_path: str) -> bool:
         last_out = res2.stdout
 
     if success:
-        print(f"[compile] PDF successfully generated: {pdf_path}")
+        page_count = get_pdf_page_count(pdf_path)
+        if page_count > 1:
+            print(
+                f"[compile] [error] Page count overflow! Generated PDF has {page_count} pages (must fit exactly 1 page).\n"
+                f"       Reduce content length or trim bullet points to fit 1 page.",
+                file=sys.stderr,
+            )
+            return False
+        print(f"[compile] PDF successfully generated: {pdf_path} (1 page, fit verified)")
         return True
     else:
         print("[compile] [error] PDF compilation failed.", file=sys.stderr)

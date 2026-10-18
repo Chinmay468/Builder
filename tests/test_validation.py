@@ -13,8 +13,10 @@ from unittest.mock import patch
 
 from resume_tailor import (
     braces_balanced,
+    compile_pdf,
     extract_latex,
     extract_master_facts,
+    get_pdf_page_count,
     looks_like_latex,
     load_job_description,
     print_diff,
@@ -348,6 +350,31 @@ class TestValidationRetryGating(unittest.TestCase):
             tailor_resume(master_sample, "Job Description", api_key="dummy_key")
         self.assertIn("validation failed after retry", str(ctx.exception))
         self.assertEqual(mock_groq.call_count, 2)
+
+
+class TestPdfCompilationAndPageCount(unittest.TestCase):
+    def test_get_pdf_page_count_nonexistent_returns_0(self):
+        self.assertEqual(get_pdf_page_count("non_existent_file.pdf"), 0)
+
+    def test_get_pdf_page_count_for_master_resume(self):
+        if os.path.isfile("master_resume.pdf"):
+            count = get_pdf_page_count("master_resume.pdf")
+            self.assertEqual(count, 1)
+
+    @patch("resume_tailor.subprocess.run")
+    @patch("os.path.isfile", return_value=True)
+    @patch("resume_tailor.get_pdf_page_count", return_value=2)
+    def test_compile_pdf_fails_on_page_overflow(self, mock_count, mock_isfile, mock_subproc):
+        # Even when compiler returns 0 and file exists, page_count > 1 must fail compile_pdf
+        res = compile_pdf("master_resume.tex")
+        self.assertFalse(res)
+
+    @patch("resume_tailor.subprocess.run")
+    @patch("os.path.isfile", return_value=True)
+    @patch("resume_tailor.get_pdf_page_count", return_value=1)
+    def test_compile_pdf_succeeds_on_single_page(self, mock_count, mock_isfile, mock_subproc):
+        res = compile_pdf("master_resume.tex")
+        self.assertTrue(res)
 
 
 if __name__ == "__main__":
