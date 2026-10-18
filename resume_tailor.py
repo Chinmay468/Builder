@@ -613,6 +613,13 @@ def get_validation_errors(tailored_tex: str, master_tex: str) -> list[str]:
     if ">{\\bfseries}l" in master_tex and ">{\\bfseries}l" not in tailored_tex:
         errors.append("Skills tabular format broken")
 
+    # 7. Check pre-selected projects preserved
+    master_proj_matches = re.findall(r"\\textbf\{([^}]+)\}\s*(?:\\rightarrow|\$\\rightarrow\$)", master_tex)
+    for proj_title in master_proj_matches:
+        base_title = proj_title.split(":")[0].strip()
+        if base_title not in tailored_tex:
+            errors.append(f"Pre-selected project '{proj_title}' was altered or omitted")
+
     return errors
 
 
@@ -716,6 +723,7 @@ CONTENT ACCURACY & METHODOLOGY CLAIMS:
 - Never fabricate employers, dates, or achievements
 - Rephrase bullets using JD keywords only where truthfully applicable
 - SELF-CONSISTENCY GUARDRAIL: Never claim a methodology, engineering practice, or proficiency level in the Summary (e.g. "Proficient in TDD", "expert in X", "specialized in Y") that is not directly evidenced by the experience or project bullets in that same resume. If the JD mentions a practice like TDD / Test-Driven Development and the candidate's actual bullets describe testing after implementation (such as integration, regression, or concurrency testing), the summary must reflect that precisely (e.g. "strong focus on test coverage and reliability" or "experienced in automated testing and regression validation") rather than claiming TDD specifically. Never echo the JD's methodology buzzwords as an unsupported personal claim.
+- PROJECTS PRESERVATION: The Projects section has been pre-selected deterministically to highlight the most relevant candidate projects for this JD. Retain these exact pre-selected projects; never replace, rename, or invent projects.
 
 ═══════════════════════════════════════════════════════════
 WHAT YOU MAY CHANGE
@@ -724,7 +732,7 @@ WHAT YOU MAY CHANGE
 1. SUMMARY — Rewrite to mirror JD language where truthful, max 3 lines, specific to role. Strictly adhere to the self-consistency guardrail: do not claim methodologies or proficiency levels (e.g. TDD) not directly backed by experience/project bullets.
 2. SKILLS — Reorder rows to put most JD-relevant skills first, keep same format
 3. BULLET POINTS — Rephrase using JD keywords where truthful, keep \\item format
-4. PROJECT ORDER — Lead with the project most relevant to the JD
+4. PROJECTS — The Projects section in the input contains the top candidate projects pre-selected for this JD. Rephrase the bullets for these provided projects using JD keywords where truthfully applicable, keeping \\item format (max 2 bullets per project, 2 lines each). Do NOT substitute, invent, or rename projects.
 5. SKILLS VALUES — Add JD-relevant skills that exist in the master resume
 
 ═══════════════════════════════════════════════════════════
@@ -1040,6 +1048,224 @@ GROUND TRUTH ENFORCEMENT:
 """
 
 
+# --------------------------------------------------------------------------
+# Project Selection Subsystem (Deterministic Stack-Overlap Ranking)
+# --------------------------------------------------------------------------
+
+DEFAULT_PROJECTS_POOL: list[dict] = [
+    {
+        "id": "distributed-order-processing",
+        "title": "Distributed Order Processing System",
+        "github_url": "https://github.com/Chinmay0608/distributed-order-processing",
+        "tech_stack": "Java, Spring Boot, Apache Kafka, Redis, MongoDB",
+        "keywords": [
+            "java", "spring", "spring boot", "kafka", "redis", "distributed", "concurrency",
+            "saga", "microservices", "idempotent", "transactions", "event-driven", "backend",
+            "docker", "resilience", "orders", "inventory", "lock", "redisson", "multithreading"
+        ],
+        "bullets": [
+            "Engineered a distributed order processing engine in Java and Spring Boot with Redisson distributed locks (500ms wait) to eliminate inventory overselling under high concurrency.",
+            "Implemented idempotent transaction intake with SHA-256 payload fingerprinting and asynchronous Kafka event streaming (\\texttt{order-placed}) with transactional saga compensation.",
+            "Executed atomic stock reservations in MongoDB using \\$gte conditions and containerized multi-service deployment with Docker Compose.",
+        ],
+    },
+    {
+        "id": "job-portal-system",
+        "title": "Skill-Bridge : Job Portal System",
+        "github_url": "https://github.com/Chinmay0608/job-portal-system",
+        "tech_stack": "React.js, Node.js, Express.js, MongoDB, JWT",
+        "keywords": [
+            "react", "react.js", "node", "node.js", "express", "express.js", "mongodb", "jwt",
+            "mern", "javascript", "full stack", "fullstack", "auth", "cloudinary", "bullmq",
+            "frontend", "web", "rest", "api"
+        ],
+        "bullets": [
+            "Built a full-stack job portal with role-based auth (job seekers and employers), profile and resume management, and a complete job posting/application workflow.",
+            "Handled token-based session management using JWT and HTTP-only cookies, with input validation and centralized error handling across all API routes.",
+            "Integrated Cloudinary for resume uploads and deployed the app with a live demo. Used AI tools for boilerplate and UI work, while owning the API design, auth flows, and data model.",
+        ],
+    },
+    {
+        "id": "mindvault",
+        "title": "MindVault : Journal Management System",
+        "github_url": "https://github.com/Chinmay0608/MindVault",
+        "tech_stack": "Java, Spring Boot, Gemini API, Apache Kafka",
+        "keywords": [
+            "java", "spring", "spring boot", "gemini", "gemini api", "kafka", "mongodb",
+            "sentiment analysis", "ai", "llm", "jwt", "rest", "rest api", "backend",
+            "journal", "microservices"
+        ],
+        "bullets": [
+            "Built a Spring Boot backend for a journaling app with JWT authentication (15-minute access tokens plus HTTP-only refresh cookies), role-based access, and layered REST APIs backed by MongoDB.",
+            "Used Apache Kafka to run sentiment analysis asynchronously, so saving a journal entry returns immediately instead of waiting on the external AI call.",
+            "Integrated the Gemini API for mood classification, with a local keyword-based fallback that keeps analysis working when the API fails or is rate-limited.",
+        ],
+    },
+    {
+        "id": "trao-ai-interview-prep-kit",
+        "title": "Trao : AI Interview Prep Kit",
+        "github_url": "https://github.com/Chinmay0608/trao-ai-interview-prep-kit",
+        "tech_stack": "TypeScript, Next.js, React, Node.js, REST APIs",
+        "keywords": [
+            "typescript", "next", "next.js", "react", "react.js", "ai", "llm", "evaluation",
+            "interview", "prompt engineering", "generator", "tailwind", "cli", "frontend",
+            "full stack", "fullstack"
+        ],
+        "bullets": [
+            "Built an autonomous AI interview preparation kit generator with deterministic coverage engine and interactive Next.js builder interface.",
+            "Engineered multi-stage generation pipelines transforming raw job descriptions into structured assessment rounds, role rubrics, and targeted interview prompts.",
+            "Created batch evaluation CLI tooling with TypeScript and Node.js for automated interview kit generation and validation against benchmark roles.",
+        ],
+    },
+    {
+        "id": "gcc-job-radar",
+        "title": "GCC Job Radar : Automated Job Discovery & Scoring System",
+        "github_url": "https://github.com/Chinmay468/gcc-job-radar",
+        "tech_stack": "Python, SQLite, Turso, REST APIs, Beautiful Soup",
+        "keywords": [
+            "python", "sqlite", "turso", "scraping", "beautifulsoup", "automation", "ats",
+            "greenhouse", "lever", "ashby", "workday", "crawler", "cli", "github actions",
+            "scoring", "relevance", "data pipeline"
+        ],
+        "bullets": [
+            "Built a high-performance Python CLI aggregating entry-level engineering roles across 4,800+ global tech companies via canonical ATS APIs (Greenhouse, Lever, Ashby, Workday).",
+            "Engineered a deterministic stack-relevance scoring engine (0-100 pts) matching candidates against target tech stacks and filtering out non-entry-level postings.",
+            "Implemented multi-account IMAP email ingestion, bidirectional Turso cloud SQLite sync via Hrana HTTP transport, and automated alerts via Telegram and Discord.",
+        ],
+    },
+]
+
+
+def load_projects_pool(json_path: Optional[str] = None) -> list[dict]:
+    """
+    Loads candidate projects pool from projects.json if present, falling back to DEFAULT_PROJECTS_POOL.
+    """
+    candidates = [
+        json_path,
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "projects.json"),
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "projects.json"),
+        os.path.join(os.getcwd(), "projects.json"),
+    ]
+    for c in filter(None, candidates):
+        if os.path.isfile(c):
+            try:
+                with open(c, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        return data
+            except Exception:
+                pass
+    return DEFAULT_PROJECTS_POOL
+
+
+def score_project_relevance(project: dict, job_description: str) -> tuple[int, list[str]]:
+    """
+    Computes a deterministic overlap score between a project's stack/keywords/dossier facts
+    and the target job description.
+    """
+    jd_lower = job_description.lower()
+    score = 0
+    matched = []
+
+    # 1. Tech stack keyword matching
+    tech_stack_str = project.get("tech_stack", "")
+    tech_items = [t.strip() for t in tech_stack_str.split(",") if t.strip()]
+    for tech in tech_items:
+        t_clean = tech.lower()
+        pattern = r"\b" + re.escape(t_clean) + r"\b"
+        if re.search(pattern, jd_lower):
+            score += 25
+            if tech not in matched:
+                matched.append(tech)
+
+    # 2. Domain, feature, and architectural keywords
+    keywords = project.get("keywords", [])
+    for kw in keywords:
+        kw_clean = kw.lower()
+        if kw_clean in [m.lower() for m in matched]:
+            continue
+        pattern = r"\b" + re.escape(kw_clean) + r"\b"
+        if re.search(pattern, jd_lower):
+            score += 10
+            matched.append(kw)
+
+    return score, matched
+
+
+def rank_projects(
+    job_description: str,
+    projects_pool: Optional[list[dict]] = None,
+    top_n: int = 2,
+) -> list[tuple[dict, int, list[str]]]:
+    """
+    Ranks projects deterministically against the target job description using stack-overlap scoring.
+    Returns the top N ranked projects sorted by relevance score descending.
+    """
+    pool = projects_pool if projects_pool is not None else load_projects_pool()
+    scored = []
+    for proj in pool:
+        score, matched = score_project_relevance(proj, job_description)
+        scored.append((proj, score, matched))
+
+    # Deterministic sort: highest score first, then stable tie-breaker by project ID
+    scored.sort(key=lambda x: (x[1], -len(x[2])), reverse=True)
+    return scored[:top_n]
+
+
+def render_projects_latex(ranked_projects: list[tuple[dict, int, list[str]]]) -> str:
+    """
+    Renders selected projects into clean LaTeX suitable for injection into master_resume.tex.
+    """
+    blocks = [r"\begin{rSection}{PROJECTS}", r"\vspace{-2pt}"]
+    for idx, (proj, _, _) in enumerate(ranked_projects):
+        title = proj.get("title", "")
+        url = proj.get("github_url", "")
+        stack = proj.get("tech_stack", "")
+        bullets = proj.get("bullets", [])
+
+        proj_header = f"\\textbf{{{title}}} $\\rightarrow$"
+        if url:
+            proj_header += f"\n\\href{{{url}}}{{[Github]}}"
+        proj_header += f"\n\\hfill {{{stack}}}"
+
+        items_latex = "\n".join(f"\\item {b}" for b in bullets)
+        block = f"""{proj_header}
+\\begin{{itemize}}[leftmargin=*, itemsep=-3pt, topsep=0pt]
+{items_latex}
+\\end{{itemize}}"""
+        blocks.append(block)
+        if idx < len(ranked_projects) - 1:
+            blocks.append(r"\vspace{2pt}")
+
+    blocks.append(r"\vspace{-4pt}")
+    blocks.append(r"\end{rSection}")
+    return "\n".join(blocks)
+
+
+def inject_selected_projects(
+    master_tex: str,
+    job_description: str,
+    top_n: int = 2,
+    projects_pool: Optional[list[dict]] = None,
+) -> tuple[str, list[tuple[dict, int, list[str]]]]:
+    """
+    Deterministically ranks projects against the JD, replaces the PROJECTS section in master_tex
+    with the top-N ranked projects, and returns the modified master_tex along with the ranking details.
+    """
+    ranked = rank_projects(job_description, projects_pool, top_n=top_n)
+    if not ranked:
+        return master_tex, []
+
+    projects_latex = render_projects_latex(ranked)
+    pattern = r"\\begin\{rSection\}\{PROJECTS\}.*?\\end\{rSection\}"
+    if re.search(pattern, master_tex, re.DOTALL | re.IGNORECASE):
+        updated_tex = re.sub(pattern, lambda _: projects_latex, master_tex, count=1, flags=re.DOTALL | re.IGNORECASE)
+    else:
+        updated_tex = master_tex
+
+    return updated_tex, ranked
+
+
 def tailor_resume(
     master_tex: str,
     job_description: str,
@@ -1048,10 +1274,12 @@ def tailor_resume(
     model: str = DEFAULT_MODEL,
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
+    top_projects: int = 2,
+    projects_file: Optional[str] = None,
 ) -> str:
     """
     Tailor a master resume LaTeX document for a specific JD and return the resulting LaTeX string.
-    Includes a single automatic retry with validation error feedback if facts or formatting drift.
+    Includes deterministic project-selection and a single automatic retry with validation error feedback.
     """
     keys = get_groq_api_keys()
     if api_key:
@@ -1060,6 +1288,15 @@ def tailor_resume(
         keys.insert(0, api_key)
     if not keys:
         raise ValueError("No Groq API keys found. Configure GROQ_API_KEY in .env.")
+
+    if top_projects > 0:
+        pool = load_projects_pool(projects_file)
+        master_tex, ranked = inject_selected_projects(master_tex, job_description, top_n=top_projects, projects_pool=pool)
+        if ranked:
+            print(f"[projects] Deterministically selected top {len(ranked)} projects based on JD stack overlap:")
+            for idx, (proj, score, matched) in enumerate(ranked, start=1):
+                matched_str = ", ".join(matched) if matched else "baseline"
+                print(f"  {idx}. {proj['title']} (score: {score}, matched: [{matched_str}])")
 
     user_prompt = build_user_prompt(master_tex, job_description, company, role)
     system_prompt = get_tailor_system_prompt(master_tex)
@@ -1225,6 +1462,17 @@ def main():
         default=os.environ.get("GROQ_BASE_URL"),
         help="API base URL (defaults to GROQ_BASE_URL or https://api.groq.com/openai/v1/chat/completions)",
     )
+    parser.add_argument(
+        "--top-projects",
+        type=int,
+        default=2,
+        help="Number of top projects to deterministically select and tailor for the JD (default: 2)",
+    )
+    parser.add_argument(
+        "--projects-file",
+        default=None,
+        help="Path to custom projects.json file containing the candidate project pool",
+    )
 
     args = parser.parse_args()
 
@@ -1268,6 +1516,18 @@ def main():
 
     if not job_description or len(job_description.strip()) < 30:
         sys.exit("[error] Job description is empty or too short (< 30 characters).")
+
+    # [1.5/4] Deterministic Project Selection
+    if args.top_projects > 0:
+        pool = load_projects_pool(args.projects_file)
+        resume_tex, ranked_projects = inject_selected_projects(
+            resume_tex, job_description, top_n=args.top_projects, projects_pool=pool
+        )
+        if ranked_projects:
+            print(f"[projects] Deterministically selected top {len(ranked_projects)} projects based on JD stack overlap:")
+            for idx, (proj, score, matched) in enumerate(ranked_projects, start=1):
+                matched_str = ", ".join(matched) if matched else "general baseline"
+                print(f"  {idx}. {proj['title']} (score: {score}, matched: [{matched_str}])")
 
     # [2/4] Call Groq API with Smart Shifting
     shift_info = f" [smart shifting active across {len(keys)} keys]" if len(keys) > 1 else ""

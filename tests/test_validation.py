@@ -17,9 +17,13 @@ from resume_tailor import (
     extract_latex,
     extract_master_facts,
     get_pdf_page_count,
+    inject_selected_projects,
+    load_projects_pool,
     looks_like_latex,
     load_job_description,
     print_diff,
+    rank_projects,
+    score_project_relevance,
     tailor_resume,
     validate_output,
 )
@@ -375,6 +379,96 @@ class TestPdfCompilationAndPageCount(unittest.TestCase):
     def test_compile_pdf_succeeds_on_single_page(self, mock_count, mock_isfile, mock_subproc):
         res = compile_pdf("master_resume.tex")
         self.assertTrue(res)
+
+
+class TestProjectSelectionAndRanking(unittest.TestCase):
+    def test_load_projects_pool_contains_5_grounded_projects(self):
+        pool = load_projects_pool()
+        self.assertGreaterEqual(len(pool), 5)
+        titles = [p["title"] for p in pool]
+        self.assertTrue(any("Distributed Order Processing" in t for t in titles))
+        self.assertTrue(any("Skill-Bridge" in t for t in titles))
+        self.assertTrue(any("MindVault" in t for t in titles))
+        self.assertTrue(any("Trao" in t for t in titles))
+        self.assertTrue(any("GCC Job Radar" in t for t in titles))
+
+    def test_ranking_prefers_distributed_and_mindvault_for_java_kafka_jd(self):
+        java_jd = "Senior Backend Engineer with strong Java, Spring Boot, Apache Kafka, Redis, and microservices."
+        ranked = rank_projects(java_jd, top_n=2)
+        top_titles = [p["title"] for p, _, _ in ranked]
+        self.assertIn("Distributed Order Processing System", top_titles[0])
+        self.assertIn("MindVault : Journal Management System", top_titles[1])
+
+    def test_ranking_prefers_trao_for_nextjs_ai_jd(self):
+        ai_jd = "Full Stack AI Engineer. Experience with Next.js, React, TypeScript, AI prompting, and evaluation."
+        ranked = rank_projects(ai_jd, top_n=2)
+        top_titles = [p["title"] for p, _, _ in ranked]
+        self.assertTrue(any("Trao" in t for t in top_titles))
+
+    def test_ranking_prefers_gcc_job_radar_for_python_scraping_jd(self):
+        python_jd = "Python Engineer for web scraping, BeautifulSoup, ATS APIs, SQLite, and automation workflows."
+        ranked = rank_projects(python_jd, top_n=2)
+        top_titles = [p["title"] for p, _, _ in ranked]
+        self.assertTrue(any("GCC Job Radar" in t for t in top_titles))
+
+    def test_inject_selected_projects_replaces_latex_block(self):
+        sample_tex = (
+            "\\begin{document}\n"
+            "\\begin{rSection}{EXPERIENCE}\n"
+            "\\item intern\n"
+            "\\end{rSection}\n"
+            "\\begin{rSection}{PROJECTS}\n"
+            "\\textbf{Old Project} $\\rightarrow$ \\hfill {Old Stack}\n"
+            "\\begin{itemize} \\item old bullet \\end{itemize}\n"
+            "\\end{rSection}\n"
+            "\\begin{rSection}{SKILLS}\n"
+            ">{\\bfseries}l\n"
+            "\\end{rSection}\n"
+            "\\end{document}\n"
+        )
+        java_jd = "Java, Spring Boot, Redis, Kafka, Distributed systems."
+        updated_tex, ranked = inject_selected_projects(sample_tex, java_jd, top_n=2)
+        self.assertNotIn("Old Project", updated_tex)
+        self.assertIn("Distributed Order Processing System", updated_tex)
+        self.assertIn("MindVault : Journal Management System", updated_tex)
+        self.assertTrue(braces_balanced(updated_tex))
+        self.assertTrue(looks_like_latex(updated_tex))
+
+
+class TestBenchmarkRegression(unittest.TestCase):
+    def test_master_resume_has_locked_dsa_count_400_plus(self):
+        with open("master_resume.tex", "r", encoding="utf-8") as f:
+            content = f.read()
+        facts = extract_master_facts(content)
+        self.assertEqual(facts["dsa_count"], "400+")
+        self.assertIn(r"\textbf{400+} DSA problems", content)
+
+    def test_validator_rejects_historical_300_plus_drift(self):
+        with open("master_resume.tex", "r", encoding="utf-8") as f:
+            master = f.read()
+        # Historical drift from Mastercard wd1 resume had 300+
+        drifted = master.replace("400+", "300+")
+        self.assertFalse(validate_output(drifted, master))
+
+    def test_resume_cls_has_no_infinite_fill_glue(self):
+        with open("resume.cls", "r", encoding="utf-8") as f:
+            cls_content = f.read()
+        # Verify 1fill infinite stretch glue is removed from sectionskip
+        self.assertNotIn(r"\def\sectionskip{\vspace{4pt plus 1fill minus 2pt}}", cls_content)
+        self.assertIn(r"\def\sectionskip{\vspace{8pt plus 2pt minus 2pt}}", cls_content)
+        self.assertIn(r"\def\nameskip{\vspace{6pt plus 2pt minus 2pt}}", cls_content)
+
+    def test_ranking_traceability_across_benchmark_jds(self):
+        ea_jd = "Electronic Arts Software Engineer: Java, Spring Boot, distributed concurrency, microservices, Kafka."
+        ressl_jd = "Ressl AI: Python, LLM orchestration, evaluation, Next.js, React."
+        mastercard_jd = "Mastercard SDE I-1: Java, Spring Boot, REST APIs, payments, relational and NoSQL databases."
+
+        for jd, name in [(ea_jd, "EA"), (ressl_jd, "Ressl AI"), (mastercard_jd, "Mastercard")]:
+            ranked = rank_projects(jd, top_n=2)
+            self.assertEqual(len(ranked), 2)
+            # Scores must be positive and traceable
+            self.assertGreater(ranked[0][1], 0)
+            self.assertGreater(len(ranked[0][2]), 0)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "distributed-order-processing",
+    "title": "Distributed Order Processing System",
+    "github_url": "https://github.com/Chinmay0608/distributed-order-processing",
+    "tech_stack": "Java, Spring Boot, Apache Kafka, Redis, MongoDB",
+    "keywords": [
+      "java", "spring", "spring boot", "kafka", "redis", "distributed", "concurrency",
+      "saga", "microservices", "idempotent", "transactions", "event-driven", "backend",
+      "docker", "resilience", "orders", "inventory", "lock", "redisson"
+    ],
+    "bullets": [
+      "Engineered a distributed order processing engine in Java and Spring Boot with Redisson distributed locks (500ms wait) to eliminate inventory overselling under high concurrency.",
+      "Implemented idempotent transaction intake with SHA-256 payload fingerprinting and asynchronous Kafka event streaming (\\texttt{order-placed}) with transactional saga compensation.",
+      "Executed atomic stock reservations in MongoDB using \\$gte conditions and containerized multi-service deployment with Docker Compose."
+    ]
+  },
+  {
+    "id": "job-portal-system",
+    "title": "Skill-Bridge : Job Portal System",
+    "github_url": "https://github.com/Chinmay0608/job-portal-system",
+    "tech_stack": "React.js, Node.js, Express.js, MongoDB, JWT",
+    "keywords": [
+      "react", "react.js", "node", "node.js", "express", "express.js", "mongodb", "jwt",
+      "mern", "javascript", "full stack", "fullstack", "auth", "cloudinary", "bullmq",
+      "frontend", "web", "rest", "api"
+    ],
+    "bullets": [
+      "Built a full-stack job portal with role-based auth (job seekers and employers), profile and resume management, and a complete job posting/application workflow.",
+      "Handled token-based session management using JWT and HTTP-only cookies, with input validation and centralized error handling across all API routes.",
+      "Integrated Cloudinary for resume uploads and deployed the app with a live demo. Used AI tools for boilerplate and UI work, while owning the API design, auth flows, and data model."
+    ]
+  },
+  {
+    "id": "mindvault",
+    "title": "MindVault : Journal Management System",
+    "github_url": "https://github.com/Chinmay0608/MindVault",
+    "tech_stack": "Java, Spring Boot, Gemini API, Apache Kafka",
+    "keywords": [
+      "java", "spring", "spring boot", "gemini", "gemini api", "kafka", "mongodb",
+      "sentiment analysis", "ai", "llm", "jwt", "rest", "rest api", "backend",
+      "journal", "microservices"
+    ],
+    "bullets": [
+      "Built a Spring Boot backend for a journaling app with JWT authentication (15-minute access tokens plus HTTP-only refresh cookies), role-based access, and layered REST APIs backed by MongoDB.",
+      "Used Apache Kafka to run sentiment analysis asynchronously, so saving a journal entry returns immediately instead of waiting on the external AI call.",
+      "Integrated the Gemini API for mood classification, with a local keyword-based fallback that keeps analysis working when the API fails or is rate-limited."
+    ]
+  },
+  {
+    "id": "trao-ai-interview-prep-kit",
+    "title": "Trao : AI Interview Prep Kit",
+    "github_url": "https://github.com/Chinmay0608/trao-ai-interview-prep-kit",
+    "tech_stack": "TypeScript, Next.js, React, Node.js, REST APIs",
+    "keywords": [
+      "typescript", "next", "next.js", "react", "react.js", "ai", "llm", "evaluation",
+      "interview", "prompt engineering", "generator", "tailwind", "cli", "frontend",
+      "full stack", "fullstack"
+    ],
+    "bullets": [
+      "Built an autonomous AI interview preparation kit generator with deterministic coverage engine and interactive Next.js builder interface.",
+      "Engineered multi-stage generation pipelines transforming raw job descriptions into structured assessment rounds, role rubrics, and targeted interview prompts.",
+      "Created batch evaluation CLI tooling with TypeScript and Node.js for automated interview kit generation and validation against benchmark roles."
+    ]
+  },
+  {
+    "id": "gcc-job-radar",
+    "title": "GCC Job Radar : Automated Job Discovery & Scoring System",
+    "github_url": "https://github.com/Chinmay468/gcc-job-radar",
+    "tech_stack": "Python, SQLite, Turso, REST APIs, Beautiful Soup",
+    "keywords": [
+      "python", "sqlite", "turso", "scraping", "beautifulsoup", "automation", "ats",
+      "greenhouse", "lever", "ashby", "workday", "crawler", "cli", "github actions",
+      "scoring", "relevance", "data pipeline"
+    ],
+    "bullets": [
+      "Built a high-performance Python CLI aggregating entry-level engineering roles across 4,800+ global tech companies via canonical ATS APIs (Greenhouse, Lever, Ashby, Workday).",
+      "Engineered a deterministic stack-relevance scoring engine (0-100 pts) matching candidates against target tech stacks and filtering out non-entry-level postings.",
+      "Implemented multi-account IMAP email ingestion, bidirectional Turso cloud SQLite sync via Hrana HTTP transport, and automated alerts via Telegram and Discord."
+    ]
+  }
+]
