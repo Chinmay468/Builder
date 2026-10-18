@@ -14,9 +14,11 @@ from unittest.mock import patch
 from resume_tailor import (
     braces_balanced,
     extract_latex,
+    extract_master_facts,
     looks_like_latex,
     load_job_description,
     print_diff,
+    tailor_resume,
     validate_output,
 )
 
@@ -208,6 +210,144 @@ class TestValidateOutput(unittest.TestCase):
             + self.master_sample
         )
         self.assertTrue(validate_output(tampered, self.master_sample))
+
+
+class TestExtractMasterFacts(unittest.TestCase):
+    def test_extract_facts_from_master_sample(self):
+        sample = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{+91 9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\textbf{B.Tech in Information Technology} \\hfill {2023 -- 2027}\n"
+            "\\\\ CGPA : 8.8\n"
+            "\\item Full Stack Intern \\hfill {May 2026 -- June 2026}\n"
+            "\\item Solved \\textbf{400+} DSA problems across LeetCode\n"
+            "\\item Earned a Java Development Certification.\n"
+            "\\item Published a review paper in \\textbf{Pratibodh}\n"
+        )
+        facts = extract_master_facts(sample)
+        self.assertEqual(facts["name"], "Chinmay Maheshwari")
+        self.assertEqual(facts["phone"], "9460449962")
+        self.assertEqual(facts["email"], "chinmaymaheshwari.it27@gmail.com")
+        self.assertEqual(facts["cgpa"], "8.8")
+        self.assertEqual(facts["grad_years"], "2023 -- 2027")
+        self.assertEqual(facts["internship_dates"], "May 2026 -- June 2026")
+        self.assertEqual(facts["dsa_count"], "400+")
+        self.assertEqual(facts["cert_name"], "Java Development Certification")
+        self.assertEqual(facts["publication_type"], "review paper")
+
+    def test_extract_facts_with_custom_values(self):
+        sample = (
+            "\\documentclass{resume}\n"
+            "\\name{Jane Doe}\n"
+            "\\address{+1 5551234567 \\\\ jane@example.com}\n"
+            "\\textbf{B.Tech in IT} \\hfill {2022 -- 2026}\n"
+            "\\\\ CGPA : 9.2\n"
+            "\\item Software Engineering Intern \\hfill {June 2025 -- August 2025}\n"
+            "\\item Solved 500+ problems on LeetCode\n"
+            "\\item Earned an AWS Cloud Practitioner Certification.\n"
+        )
+        facts = extract_master_facts(sample)
+        self.assertEqual(facts["name"], "Jane Doe")
+        self.assertEqual(facts["phone"], "15551234567")
+        self.assertEqual(facts["email"], "jane@example.com")
+        self.assertEqual(facts["cgpa"], "9.2")
+        self.assertEqual(facts["grad_years"], "2022 -- 2026")
+        self.assertEqual(facts["internship_dates"], "June 2025 -- August 2025")
+        self.assertEqual(facts["dsa_count"], "500+")
+        self.assertEqual(facts["cert_name"], "AWS Cloud Practitioner Certification")
+
+
+class TestDynamicFactValidation(unittest.TestCase):
+    def test_dynamic_dsa_count_passes_when_matching_master_300(self):
+        master_300 = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\item Solved 300+ problems on LeetCode\n"
+            "\\item Review paper published.\n"
+            "\\item Java Development Certification.\n"
+            "\\begin{itemize} \\item test \\end{itemize}\n"
+            ">{\\bfseries}l\n"
+        )
+        tailored_300 = master_300
+        # When master has 300+, tailored with 300+ MUST pass!
+        self.assertTrue(validate_output(tailored_300, master_300))
+
+    def test_dynamic_dsa_count_fails_when_drifting_from_master_300_to_400(self):
+        master_300 = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\item Solved 300+ problems on LeetCode\n"
+            "\\item Review paper published.\n"
+            "\\item Java Development Certification.\n"
+            "\\begin{itemize} \\item test \\end{itemize}\n"
+            ">{\\bfseries}l\n"
+        )
+        tailored_400 = master_300.replace("300+", "400+")
+        self.assertFalse(validate_output(tailored_400, master_300))
+
+    def test_dynamic_dsa_count_passes_when_matching_master_500(self):
+        master_500 = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\item Solved 500+ problems on LeetCode\n"
+            "\\item Review paper published.\n"
+            "\\item Java Development Certification.\n"
+            "\\begin{itemize} \\item test \\end{itemize}\n"
+            ">{\\bfseries}l\n"
+        )
+        tailored_500 = master_500
+        # When master has 500+, tailored with 500+ MUST pass!
+        self.assertTrue(validate_output(tailored_500, master_500))
+
+
+class TestValidationRetryGating(unittest.TestCase):
+    @patch("resume_tailor.call_groq")
+    @patch("resume_tailor.get_groq_api_keys", return_value=["dummy_key"])
+    def test_tailor_resume_retries_and_succeeds(self, mock_keys, mock_groq):
+        master_sample = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\item Solved 400+ problems on LeetCode\n"
+            "\\item Review paper published.\n"
+            "\\item Java Development Certification.\n"
+            "\\begin{itemize} \\item test \\end{itemize}\n"
+            ">{\\bfseries}l\n"
+        )
+        # First call has wrong LeetCode count (500+), second call fixes it to 400+
+        bad_output = master_sample.replace("400+", "500+")
+        good_output = master_sample
+        mock_groq.side_effect = [bad_output, good_output]
+
+        result = tailor_resume(master_sample, "Job Description", api_key="dummy_key")
+        self.assertEqual(mock_groq.call_count, 2)
+        self.assertIn("400+", result)
+
+    @patch("resume_tailor.call_groq")
+    @patch("resume_tailor.get_groq_api_keys", return_value=["dummy_key"])
+    def test_tailor_resume_fails_loudly_when_retry_also_invalid(self, mock_keys, mock_groq):
+        master_sample = (
+            "\\documentclass{resume}\n"
+            "\\name{Chinmay Maheshwari}\n"
+            "\\address{9460449962 \\\\ chinmaymaheshwari.it27@gmail.com}\n"
+            "\\item Solved 400+ problems on LeetCode\n"
+            "\\item Review paper published.\n"
+            "\\item Java Development Certification.\n"
+            "\\begin{itemize} \\item test \\end{itemize}\n"
+            ">{\\bfseries}l\n"
+        )
+        # Both calls return wrong count
+        bad_output = master_sample.replace("400+", "500+")
+        mock_groq.side_effect = [bad_output, bad_output]
+
+        with self.assertRaises(ValueError) as ctx:
+            tailor_resume(master_sample, "Job Description", api_key="dummy_key")
+        self.assertIn("validation failed after retry", str(ctx.exception))
+        self.assertEqual(mock_groq.call_count, 2)
 
 
 if __name__ == "__main__":

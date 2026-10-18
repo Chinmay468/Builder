@@ -474,32 +474,131 @@ def looks_like_latex(tex: str) -> bool:
     return has_doc_class or has_begin_doc or has_section
 
 
-def validate_output(tailored_tex: str, master_tex: str) -> bool:
+def extract_master_facts(master_tex: str) -> dict:
+    """
+    Extract grounded candidate facts directly from the master resume LaTeX.
+    Ensures master_resume.tex is the single dynamic source of truth everywhere.
+    """
+    facts = {
+        "name": "Chinmay Maheshwari",
+        "phone": "9460449962",
+        "email": "chinmaymaheshwari.it27@gmail.com",
+        "cgpa": "8.8",
+        "grad_years": "2023 -- 2027",
+        "internship_dates": "May 2026 -- June 2026",
+        "dsa_count": "400+",
+        "cert_name": "Java Development Certification",
+        "publication_type": "review paper",
+    }
+    if not master_tex:
+        return facts
+
+    # Name
+    name_match = re.search(r"\\name\{([^}]+)\}", master_tex)
+    if name_match:
+        facts["name"] = name_match.group(1).strip()
+
+    # Phone
+    phone_match = re.search(r"(\+?\d[\d\s-]{8,}\d)", master_tex)
+    if phone_match:
+        digits = re.sub(r"[^\d]", "", phone_match.group(1))
+        if len(digits) == 12 and digits.startswith("91"):
+            facts["phone"] = digits[2:]
+        else:
+            facts["phone"] = digits
+
+    # Email
+    email_match = re.search(r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)", master_tex)
+    if email_match:
+        facts["email"] = email_match.group(1).strip()
+
+    # CGPA
+    cgpa_match = re.search(r"CGPA\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)", master_tex, re.IGNORECASE)
+    if cgpa_match:
+        facts["cgpa"] = cgpa_match.group(1).strip()
+
+    # Graduation / Academic Year
+    grad_match = re.search(r"(\b202\d\s*(?:--|-|–)\s*202\d\b)", master_tex)
+    if grad_match:
+        facts["grad_years"] = grad_match.group(1).strip()
+
+    # Internship dates
+    intern_match = re.search(
+        r"((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+20\d\d\s*(?:--|-|–)\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+20\d\d)",
+        master_tex,
+        re.IGNORECASE,
+    )
+    if intern_match:
+        facts["internship_dates"] = intern_match.group(1).strip()
+
+    # LeetCode / DSA problem count (e.g. \textbf{400+} or 400+ problems)
+    dsa_match = re.search(
+        r"(?:\\textbf\{)?(\d+\+?)(?:\})?\s*(?:DSA\s+problems|problems\s+across\s+LeetCode|problems\s+on\s+LeetCode)",
+        master_tex,
+        re.IGNORECASE,
+    )
+    if dsa_match:
+        facts["dsa_count"] = dsa_match.group(1).strip()
+
+    # Certification
+    cert_match = re.search(r"([A-Za-z0-9\s]+?Certification)", master_tex)
+    if cert_match:
+        val = cert_match.group(1).strip()
+        val = re.sub(r"^(?:Earned\s+(?:an?\s+)?|item\s+)+", "", val).strip()
+        facts["cert_name"] = val
+
+    # Publication type
+    pub_match = re.search(r"Published\s+a\s+(review|research)\s+paper", master_tex, re.IGNORECASE)
+    if pub_match:
+        facts["publication_type"] = pub_match.group(1).lower() + " paper"
+
+    return facts
+
+
+def get_validation_errors(tailored_tex: str, master_tex: str) -> list[str]:
     """
     Validates that personal details, candidate facts, and structural formatting
     from the master resume are strictly preserved in the tailored output.
+    Returns a list of validation error descriptions.
     """
     errors = []
+    facts = extract_master_facts(master_tex)
 
-    # Check personal details preserved
-    if "Chinmay Maheshwari" in master_tex and "Chinmay Maheshwari" not in tailored_tex:
-        errors.append("Name was changed")
-    if "9460449962" in master_tex and "9460449962" not in tailored_tex:
+    # 1. Check personal details preserved
+    name = facts.get("name", "Chinmay Maheshwari")
+    if name in master_tex and name not in tailored_tex:
+        errors.append(f"Name was changed (expected '{name}')")
+
+    phone = facts.get("phone", "9460449962")
+    clean_tailored_digits = re.sub(r"[^\d]", "", tailored_tex)
+    if phone and phone not in clean_tailored_digits:
         errors.append("Phone was changed")
-    if "chinmaymaheshwari.it27@gmail.com" in master_tex and "chinmaymaheshwari.it27@gmail.com" not in tailored_tex:
+
+    email = facts.get("email", "chinmaymaheshwari.it27@gmail.com")
+    if email in master_tex and email not in tailored_tex:
         errors.append("Email was changed")
 
-    # Check accuracy rules
-    if "research paper" in tailored_tex.lower():
+    # 2. Check accuracy rules
+    if "research paper" in tailored_tex.lower() and "research paper" not in master_tex.lower():
         errors.append("Says 'research paper' instead of 'review paper'")
-    if "Professional Java" in tailored_tex:
+    if "Professional Java" in tailored_tex and "Professional Java" not in master_tex:
         errors.append("Says 'Professional Java Development Certification'")
-    if "500+" in tailored_tex or "300+" in tailored_tex:
-        errors.append("Wrong LeetCode count")
+
+    # 3. Dynamic LeetCode count check derived from master_tex
+    expected_dsa = facts.get("dsa_count")
+    if expected_dsa:
+        if expected_dsa not in tailored_tex:
+            errors.append(f"Expected LeetCode/DSA count '{expected_dsa}' not found in tailored resume")
+        # Ensure it didn't drift to conflicting numbers
+        for drift_count in ["300+", "400+", "500+", "600+"]:
+            if drift_count != expected_dsa and drift_count in tailored_tex:
+                errors.append(f"Wrong LeetCode count: found '{drift_count}' instead of expected '{expected_dsa}'")
+
+    # 4. Internship dates check
     if "May 2026 -- Present" in tailored_tex or "May 2026 – Present" in tailored_tex or "May 2026 - Present" in tailored_tex:
         errors.append("Internship marked as ongoing")
 
-    # Check methodology claims self-consistency (e.g. TDD claimed in summary without bullets evidence)
+    # 5. Check methodology claims self-consistency (e.g. TDD claimed in summary without bullets evidence)
     summary_match = re.search(r"\\begin\{rSection\}\{SUMMARY\}(.*?)\\end\{rSection\}", tailored_tex, re.DOTALL | re.IGNORECASE)
     if summary_match:
         summary_text = summary_match.group(1).lower()
@@ -508,12 +607,21 @@ def validate_output(tailored_tex: str, master_tex: str) -> bool:
             if not re.search(r"\b(?:tdd|test-driven(?:\s+development)?)\b", bullets_text):
                 errors.append("Summary claims TDD / Test-Driven Development without supporting evidence in experience/project bullets")
 
-    # Check structure preserved
+    # 6. Check structure preserved
     if "\\begin{itemize}" in master_tex and "\\begin{itemize}" not in tailored_tex:
         errors.append("itemize environment removed")
     if ">{\\bfseries}l" in master_tex and ">{\\bfseries}l" not in tailored_tex:
         errors.append("Skills tabular format broken")
 
+    return errors
+
+
+def validate_output(tailored_tex: str, master_tex: str) -> bool:
+    """
+    Validates that personal details, candidate facts, and structural formatting
+    from the master resume are strictly preserved in the tailored output.
+    """
+    errors = get_validation_errors(tailored_tex, master_tex)
     if errors:
         print("\n[VALIDATION WARNINGS]", file=sys.stderr)
         for e in errors:
@@ -523,11 +631,48 @@ def validate_output(tailored_tex: str, master_tex: str) -> bool:
     return len(errors) == 0
 
 
+def build_validation_retry_prompt(invalid_tex: str, errors: list[str]) -> str:
+    """
+    Constructs an error-feedback prompt for the LLM to fix specific validation errors.
+    """
+    bullet_errors = "\n".join(f"- {e}" for e in errors)
+    return f"""The previous LaTeX resume output contained validation errors that violate candidate facts or LaTeX structure:
+
+VALIDATION ERRORS TO FIX:
+{bullet_errors}
+
+PREVIOUS TAILORED LATEX RESUME:
+==================================================
+{invalid_tex.strip()}
+==================================================
+
+Please fix these exact errors immediately.
+Rules:
+- Strictly correct all listed errors (e.g. restore accurate LeetCode count, candidate facts, or structure).
+- Preserve all other good bullet rewrites, ATS keywords, and LaTeX styling.
+- Return ONLY the full corrected LaTeX source code starting from \\documentclass to \\end{{document}}.
+- Do NOT include any markdown code fences, notes, or explanations.
+"""
+
+
 # --------------------------------------------------------------------------
 # System & User Prompts
 # --------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are an expert resume writer who tailors LaTeX resumes for specific job descriptions.
+def build_tailor_system_prompt(master_tex: Optional[str] = None) -> str:
+    """
+    Dynamically builds the tailoring system prompt using candidate facts extracted
+    directly from master_tex, preventing factual drift or contradiction.
+    """
+    facts = extract_master_facts(master_tex) if master_tex else extract_master_facts("")
+    cgpa = facts.get("cgpa", "8.8")
+    grad_years = facts.get("grad_years", "2023 -- 2027")
+    internship_dates = facts.get("internship_dates", "May 2026 -- June 2026")
+    dsa_count = facts.get("dsa_count", "400+")
+    cert_name = facts.get("cert_name", "Java Development Certification")
+    pub_type = facts.get("publication_type", "review paper")
+
+    return f"""You are an expert resume writer who tailors LaTeX resumes for specific job descriptions.
 You receive a master LaTeX resume and a job description. Your job is to tailor the resume
 content while preserving ALL LaTeX formatting exactly.
 
@@ -538,23 +683,23 @@ ABSOLUTE RULES — NEVER VIOLATE ANY OF THESE
 STRUCTURE PRESERVATION:
 - Output ONLY the complete LaTeX source, no explanations, no markdown fences
 - Never change \\documentclass, \\usepackage, or geometry settings
-- Never change \\begin{itemize} / \\item to em-dashes or any other format
+- Never change \\begin{{itemize}} / \\item to em-dashes or any other format
 - Never modify \\vspace, \\hspace, or spacing commands
 - Never change tabular structure in the skills section
 - Never modify \\textbf, \\hfill, or alignment commands
-- Never change \\begin{rSection} names or formatting
+- Never change \\begin{{rSection}} names or formatting
 - The output must compile without errors in the same LaTeX environment as the input
 
 PERSONAL DETAILS — NEVER CHANGE:
 - Name, phone, email, LinkedIn, GitHub, LeetCode URLs
-- All \\href{} certificate and paper URLs
-- CGPA: 8.8, Graduation: 2023-2027
+- All \\href{{}} certificate and paper URLs
+- CGPA: {cgpa}, Graduation: {grad_years}
 
 CANDIDATE FACTS — NEVER CONTRADICT:
-- Internship: May 2026 – June 2026 (completed)
-- LeetCode: exactly "400+"
-- Publication: "review paper" NOT "research paper"
-- Certification: "Java Development Certification" only
+- Internship: {internship_dates} (completed)
+- LeetCode: exactly "{dsa_count}"
+- Publication: "{pub_type}" NOT "research paper"
+- Certification: "{cert_name}" only
 - Python: "(basics)" only
 - Graduation: May/June 2027
 
@@ -586,9 +731,12 @@ WHAT YOU MAY CHANGE
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════
 
-Return ONLY the complete LaTeX code starting from \\documentclass to \\end{document}.
+Return ONLY the complete LaTeX code starting from \\documentclass to \\end{{document}}.
 No explanations. No markdown. No commentary. Just the LaTeX.
 """
+
+
+SYSTEM_PROMPT = build_tailor_system_prompt()
 
 
 def build_user_prompt(resume_tex: str, job_description: str, company: str, role: str) -> str:
@@ -781,11 +929,12 @@ def load_github_dossier() -> str:
     return ""
 
 
-def get_tailor_system_prompt() -> str:
+def get_tailor_system_prompt(master_tex: Optional[str] = None) -> str:
+    base_prompt = build_tailor_system_prompt(master_tex)
     dossier = load_github_dossier()
     if not dossier:
-        return SYSTEM_PROMPT
-    return SYSTEM_PROMPT + f"""
+        return base_prompt
+    return base_prompt + f"""
 
 ═══════════════════════════════════════════════════════════
 VERIFIED CANDIDATE GITHUB PROJECT DOSSIER (GROUND TRUTH)
@@ -801,11 +950,32 @@ GROUND TRUTH ENFORCEMENT:
 """
 
 
-def get_refine_system_prompt() -> str:
+def build_refine_system_prompt(current_tex: Optional[str] = None) -> str:
+    facts = extract_master_facts(current_tex) if current_tex else extract_master_facts("")
+    cgpa = facts.get("cgpa", "8.8")
+    grad_years = facts.get("grad_years", "2023 -- 2027")
+    return f"""You are an expert resume editor. You receive a previously tailored LaTeX resume, a job description, and specific change requests/feedback from the candidate.
+Your job is to apply the candidate's feedback and refine the resume while preserving ALL LaTeX structure, ATS formatting, and candidate facts.
+
+CRITICAL RULES:
+- Never change personal details (name, email, phone, links, graduation year {grad_years}, CGPA {cgpa})
+- Never invent technologies or facts not in the resume or GitHub dossier
+- Never claim methodologies, practices, or proficiency levels (e.g. "Proficient in TDD") not directly evidenced by the bullets in the resume
+- Must fit on exactly ONE page
+- Strictly maintain \\documentclass{{resume}}, tabular skills environment, and itemize formatting
+- Return ONLY the full updated LaTeX source code from \\documentclass to \\end{{document}}. No markdown fences, no explanations.
+"""
+
+
+REFINE_SYSTEM_PROMPT = build_refine_system_prompt()
+
+
+def get_refine_system_prompt(current_tex: Optional[str] = None) -> str:
+    base_prompt = build_refine_system_prompt(current_tex)
     dossier = load_github_dossier()
     if not dossier:
-        return REFINE_SYSTEM_PROMPT
-    return REFINE_SYSTEM_PROMPT + f"""
+        return base_prompt
+    return base_prompt + f"""
 
 ═══════════════════════════════════════════════════════════
 VERIFIED CANDIDATE GITHUB PROJECT DOSSIER (GROUND TRUTH)
@@ -832,6 +1002,7 @@ def tailor_resume(
 ) -> str:
     """
     Tailor a master resume LaTeX document for a specific JD and return the resulting LaTeX string.
+    Includes a single automatic retry with validation error feedback if facts or formatting drift.
     """
     keys = get_groq_api_keys()
     if api_key:
@@ -842,25 +1013,29 @@ def tailor_resume(
         raise ValueError("No Groq API keys found. Configure GROQ_API_KEY in .env.")
 
     user_prompt = build_user_prompt(master_tex, job_description, company, role)
-    raw_output = call_groq(get_tailor_system_prompt(), user_prompt, model, keys, api_base)
+    system_prompt = get_tailor_system_prompt(master_tex)
+    raw_output = call_groq(system_prompt, user_prompt, model, keys, api_base)
     tailored_tex = sanitize_latex(extract_latex(raw_output))
     if not looks_like_latex(tailored_tex):
         raise ValueError("AI output did not contain valid LaTeX markup.")
-    validate_output(tailored_tex, master_tex)
+
+    val_errors = get_validation_errors(tailored_tex, master_tex)
+    if val_errors:
+        print("\n[VALIDATION WARNINGS — Retrying once with error feedback...]", file=sys.stderr)
+        for e in val_errors:
+            print(f"  ⚠️  {e}", file=sys.stderr)
+        retry_prompt = build_validation_retry_prompt(tailored_tex, val_errors)
+        raw_retry = call_groq(system_prompt, retry_prompt, model, keys, api_base)
+        retry_tex = sanitize_latex(extract_latex(raw_retry))
+        if not looks_like_latex(retry_tex):
+            raise ValueError("AI retry output did not contain valid LaTeX markup.")
+        val_errors_retry = get_validation_errors(retry_tex, master_tex)
+        if val_errors_retry:
+            error_list = "; ".join(val_errors_retry)
+            raise ValueError(f"Resume tailoring validation failed after retry: {error_list}")
+        tailored_tex = retry_tex
+
     return tailored_tex
-
-
-REFINE_SYSTEM_PROMPT = """You are an expert resume editor. You receive a previously tailored LaTeX resume, a job description, and specific change requests/feedback from the candidate.
-Your job is to apply the candidate's feedback and refine the resume while preserving ALL LaTeX structure, ATS formatting, and candidate facts.
-
-CRITICAL RULES:
-- Never change personal details (name, email, phone, links, graduation year 2023-2027, CGPA 8.8)
-- Never invent technologies or facts not in the resume or GitHub dossier
-- Never claim methodologies, practices, or proficiency levels (e.g. "Proficient in TDD") not directly evidenced by the bullets in the resume
-- Must fit on exactly ONE page
-- Strictly maintain \\documentclass{resume}, tabular skills environment, and itemize formatting
-- Return ONLY the full updated LaTeX source code from \\documentclass to \\end{document}. No markdown fences, no explanations.
-"""
 
 
 def refine_resume(
@@ -875,6 +1050,7 @@ def refine_resume(
 ) -> str:
     """
     Refine an existing tailored LaTeX resume based on user feedback.
+    Includes a single automatic retry with validation error feedback if facts or formatting drift.
     """
     keys = get_groq_api_keys()
     if api_key:
@@ -906,11 +1082,28 @@ CURRENT TAILORED RESUME LATEX SOURCE:
 Apply the candidate's feedback carefully to refine the LaTeX resume.
 Return ONLY the full updated LaTeX source code starting from \\documentclass to \\end{{document}}.
 """
-    raw_output = call_groq(get_refine_system_prompt(), user_prompt, model, keys, api_base)
+    system_prompt = get_refine_system_prompt(current_tex)
+    raw_output = call_groq(system_prompt, user_prompt, model, keys, api_base)
     tailored_tex = sanitize_latex(extract_latex(raw_output))
     if not looks_like_latex(tailored_tex):
         raise ValueError("AI output did not contain valid LaTeX markup.")
-    validate_output(tailored_tex, current_tex)
+
+    val_errors = get_validation_errors(tailored_tex, current_tex)
+    if val_errors:
+        print("\n[VALIDATION WARNINGS — Retrying once with error feedback...]", file=sys.stderr)
+        for e in val_errors:
+            print(f"  ⚠️  {e}", file=sys.stderr)
+        retry_prompt = build_validation_retry_prompt(tailored_tex, val_errors)
+        raw_retry = call_groq(system_prompt, retry_prompt, model, keys, api_base)
+        retry_tex = sanitize_latex(extract_latex(raw_retry))
+        if not looks_like_latex(retry_tex):
+            raise ValueError("AI retry output did not contain valid LaTeX markup.")
+        val_errors_retry = get_validation_errors(retry_tex, current_tex)
+        if val_errors_retry:
+            error_list = "; ".join(val_errors_retry)
+            raise ValueError(f"Resume refinement validation failed after retry: {error_list}")
+        tailored_tex = retry_tex
+
     return tailored_tex
 
 
@@ -1031,8 +1224,9 @@ def main():
     shift_info = f" [smart shifting active across {len(keys)} keys]" if len(keys) > 1 else ""
     print(f"[2/4] Sending to AI model ({args.model}) for tailoring{shift_info}...")
     user_prompt = build_user_prompt(resume_tex, job_description, args.company, args.role)
+    system_prompt = get_tailor_system_prompt(resume_tex)
     try:
-        raw_output = call_groq(get_tailor_system_prompt(), user_prompt, args.model, keys, args.api_base)
+        raw_output = call_groq(system_prompt, user_prompt, args.model, keys, args.api_base)
     except Exception as e:
         sys.exit(f"[error] API call failed: {e}")
 
@@ -1056,7 +1250,29 @@ def main():
         )
 
     # Validate candidate facts and structural preservation
-    validate_output(tailored_tex, resume_tex)
+    val_errors = get_validation_errors(tailored_tex, resume_tex)
+    if val_errors:
+        print("\n[3/4] Validation warnings detected — retrying once with error feedback...", file=sys.stderr)
+        for e in val_errors:
+            print(f"  ⚠️  {e}", file=sys.stderr)
+        retry_prompt = build_validation_retry_prompt(tailored_tex, val_errors)
+        try:
+            raw_retry = call_groq(system_prompt, retry_prompt, args.model, keys, args.api_base)
+            retry_tex = sanitize_latex(extract_latex(raw_retry))
+            if not looks_like_latex(retry_tex):
+                sys.exit("[error] AI retry output did not contain valid LaTeX markup.")
+            val_errors_retry = get_validation_errors(retry_tex, resume_tex)
+            if val_errors_retry:
+                print("\n[error] Validation failed again after retry:", file=sys.stderr)
+                for e in val_errors_retry:
+                    print(f"  ❌  {e}", file=sys.stderr)
+                sys.exit(1)
+            print("[3/4] Validation passed after retry correction!\n")
+            tailored_tex = retry_tex
+        except Exception as e:
+            sys.exit(f"[error] Retry call failed: {e}")
+    else:
+        print("[3/4] LaTeX validation passed successfully.")
 
     # Determine output file path
     if args.output:
