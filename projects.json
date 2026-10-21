@@ -65,7 +65,7 @@
   },
   {
     "id": "gcc-job-radar",
-    "title": "GCC Job Radar : Automated Job Discovery & Scoring System",
+    "title": "GCC Job Radar : Automated Job Discovery \\& Scoring System",
     "github_url": "https://github.com/Chinmay468/gcc-job-radar",
     "tech_stack": "Python, SQLite, Turso, REST APIs, Beautiful Soup",
     "keywords": [

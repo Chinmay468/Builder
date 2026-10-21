@@ -402,6 +402,36 @@ def extract_latex(model_output: str) -> str:
     return model_output.strip()
 
 
+def _escape_bare_ampersands(tex: str) -> str:
+    """
+    Escapes bare '&' characters outside \\begin{tabular}...\\end{tabular} environments,
+    and escapes any extra bare '&' after the first column separator on each line inside tabular.
+    Prevents fatal TeX '! Misplaced alignment tab character &.' compilation errors.
+    """
+    tabular_pattern = re.compile(r"(\\begin\{tabular\}.*?\\end\{tabular\})", re.DOTALL)
+    parts = tabular_pattern.split(tex)
+    out = []
+    for part in parts:
+        if part.startswith(r"\begin{tabular}"):
+            fixed_lines = []
+            for line in part.splitlines():
+                if line.lstrip().startswith("%"):
+                    fixed_lines.append(line)
+                    continue
+                matches = list(re.finditer(r"(?<!\\)&", line))
+                if len(matches) > 1:
+                    first_end = matches[0].end()
+                    prefix = line[:first_end]
+                    rest = re.sub(r"(?<!\\)&", r"\\&", line[first_end:])
+                    fixed_lines.append(prefix + rest)
+                else:
+                    fixed_lines.append(line)
+            out.append("\n".join(fixed_lines))
+        else:
+            out.append(re.sub(r"(?<!\\)&", r"\\&", part))
+    return "".join(out)
+
+
 def sanitize_latex(tex: str) -> str:
     """
     Replaces Unicode punctuation and special characters with standard LaTeX equivalents
@@ -423,6 +453,7 @@ def sanitize_latex(tex: str) -> str:
     }
     for orig, rep in replacements.items():
         tex = tex.replace(orig, rep)
+    tex = _escape_bare_ampersands(tex)
     tex = sanitize_summary_methodology_claims(tex)
     return tex
 
@@ -894,6 +925,16 @@ def compile_pdf(tex_path: str) -> bool:
         return False
 
     abs_tex = os.path.abspath(tex_path)
+    if os.path.isfile(abs_tex):
+        try:
+            with open(abs_tex, "r", encoding="utf-8") as f:
+                raw_tex_disk = f.read()
+            cleaned_tex_disk = _escape_bare_ampersands(raw_tex_disk)
+            if cleaned_tex_disk != raw_tex_disk:
+                with open(abs_tex, "w", encoding="utf-8") as f:
+                    f.write(cleaned_tex_disk)
+        except Exception:
+            pass
     work_dir = os.path.dirname(abs_tex) or "."
     base_name = os.path.splitext(os.path.basename(abs_tex))[0]
     pdf_path = os.path.join(work_dir, f"{base_name}.pdf")
@@ -1119,7 +1160,7 @@ DEFAULT_PROJECTS_POOL: list[dict] = [
     },
     {
         "id": "gcc-job-radar",
-        "title": "GCC Job Radar : Automated Job Discovery & Scoring System",
+        "title": "GCC Job Radar : Automated Job Discovery \\& Scoring System",
         "github_url": "https://github.com/Chinmay468/gcc-job-radar",
         "tech_stack": "Python, SQLite, Turso, REST APIs, Beautiful Soup",
         "keywords": [
