@@ -21,3 +21,7 @@ output/
 Thumbs.db
 Desktop.ini
 *.pdf
+
+# Candidate Personal Knowledge Base
+knowledge_base.json
+*knowledge_base.json
