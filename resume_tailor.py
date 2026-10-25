@@ -1179,12 +1179,18 @@ DEFAULT_PROJECTS_POOL: list[dict] = [
 
 def load_projects_pool(json_path: Optional[str] = None) -> list[dict]:
     """
-    Loads candidate projects pool from projects.json if present, falling back to DEFAULT_PROJECTS_POOL.
+    Loads candidate projects pool from knowledge_base.json or projects.json if present,
+    falling back to DEFAULT_PROJECTS_POOL.
     """
     candidates = [
         json_path,
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "knowledge_base.json"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "projects.json"),
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "knowledge_base.json"),
         os.path.join(os.path.dirname(os.path.realpath(__file__)), "projects.json"),
+        os.path.join(os.getcwd(), "builder", "knowledge_base.json"),
+        os.path.join(os.getcwd(), "builder", "projects.json"),
+        os.path.join(os.getcwd(), "knowledge_base.json"),
         os.path.join(os.getcwd(), "projects.json"),
     ]
     for c in filter(None, candidates):
@@ -1192,6 +1198,8 @@ def load_projects_pool(json_path: Optional[str] = None) -> list[dict]:
             try:
                 with open(c, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                    if isinstance(data, dict) and "projects" in data and isinstance(data["projects"], list) and len(data["projects"]) > 0:
+                        return data["projects"]
                     if isinstance(data, list) and len(data) > 0:
                         return data
             except Exception:
